@@ -35,6 +35,7 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [client, setClient] = useState(null);
+  const [authBusy, setAuthBusy] = useState(false);
   const [section1, setSection1] = useState(emptyItem());
   const [links, setLinks] = useState([emptyItem()]);
   const [offers, setOffers] = useState([emptyItem()]);
@@ -53,10 +54,37 @@ function App() {
   }, [session]);
 
   async function signIn() {
+    setAuthBusy(true);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    setAuthBusy(false);
+    if (error) alert(error.message);
+  }
+
+  async function signUp() {
+    setAuthBusy(true);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    setAuthBusy(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    alert("تم إنشاء الحساب. تفقد بريدك لتأكيد التسجيل إن كان مطلوباً.");
+  }
+
+  async function signInWithGoogle() {
+    setAuthBusy(true);
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+    setAuthBusy(false);
     if (error) alert(error.message);
   }
 
@@ -176,7 +204,22 @@ function App() {
             onChange={(e) => setPassword(e.target.value)}
           />
           <div style={{ marginTop: 12 }}>
-            <button onClick={signIn}>دخول</button>
+            <button onClick={signIn} disabled={authBusy}>
+              دخول
+            </button>
+            <button
+              className="secondary"
+              onClick={signUp}
+              disabled={authBusy}
+              style={{ marginRight: 8 }}
+            >
+              إنشاء حساب
+            </button>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <button className="secondary" onClick={signInWithGoogle} disabled={authBusy}>
+              دخول عبر Google
+            </button>
           </div>
         </div>
       </div>
