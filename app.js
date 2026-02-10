@@ -16,7 +16,9 @@ const supabase = window.supabase
     )
   : null;
 
+let _itemId = 0;
 const emptyItem = () => ({
+  _key: ++_itemId,
   title: "",
   body: "",
   image_url: "",
@@ -24,14 +26,8 @@ const emptyItem = () => ({
 });
 
 function App() {
-  if (!supabase) {
-    return (
-      <div className="container">
-        <div className="card">تعذر تشغيل البوابة حالياً.</div>
-      </div>
-    );
-  }
   const [session, setSession] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -42,6 +38,15 @@ function App() {
   const [links, setLinks] = useState([emptyItem()]);
   const [offers, setOffers] = useState([emptyItem()]);
   const [userItems, setUserItems] = useState([emptyItem()]);
+
+  if (!supabase) {
+    return (
+      <div className="container">
+        <div className="card">تعذر تشغيل البوابة حالياً.</div>
+      </div>
+    );
+  }
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -63,9 +68,10 @@ function App() {
         });
     }
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    supabase.auth.onAuthStateChange((_event, session) =>
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) =>
       setSession(session)
     );
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -112,13 +118,17 @@ function App() {
     const redirectTo =
       config?.WEB_CLIENT_URL ||
       `${window.location.origin}${window.location.pathname}`;
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo },
+      options: { redirectTo, skipBrowserRedirect: true },
     });
     setAuthBusy(false);
     if (error) {
       setAuthMessage({ type: "error", text: error.message });
+      return;
+    }
+    if (data?.url) {
+      window.location.href = data.url;
     }
   }
 
@@ -209,11 +219,17 @@ function App() {
 
   async function saveSection(section, items) {
     if (!client) return;
-    await supabase
+    setSaving(true);
+    try {
+    const { error: delError } = await supabase
       .from("client_sections")
       .delete()
       .eq("client_slug", client.slug)
       .eq("section", section);
+    if (delError) {
+      alert("خطأ بالحذف: " + delError.message);
+      return;
+    }
     const payload = items
       .filter((item) => item.title || item.body || item.image_url || item.link_url)
       .map((item, index) => ({
@@ -232,12 +248,19 @@ function App() {
         alert(error.message);
       }
     }
+    } finally { setSaving(false); }
   }
 
   async function saveUserSection(items) {
     const userId = session?.user?.id;
     if (!userId) return;
-    await supabase.from("app_user_sections").delete().eq("user_id", userId);
+    setSaving(true);
+    try {
+    const { error: delError } = await supabase.from("app_user_sections").delete().eq("user_id", userId);
+    if (delError) {
+      alert("خطأ بالحذف: " + delError.message);
+      return;
+    }
     const payload = items
       .filter((item) => item.title || item.body || item.image_url || item.link_url)
       .map((item, index) => ({
@@ -255,6 +278,7 @@ function App() {
         alert(error.message);
       }
     }
+    } finally { setSaving(false); }
   }
 
   function groupBySection(items) {
@@ -373,7 +397,7 @@ function App() {
           <button onClick={() => addItem(setUserItems, userItems)}>
             إضافة عنصر
           </button>
-          <button className="secondary" onClick={() => saveUserSection(userItems)}>
+          <button className="secondary" onClick={() => saveUserSection(userItems)} disabled={saving}>
             حفظ المحتوى
           </button>
         </div>
@@ -384,7 +408,7 @@ function App() {
           <div className="card">
             <div className="section-title">1) بيانات الشركة</div>
             <TextBlock item={section1} onChange={setSection1} onUpload={uploadImage} />
-            <button onClick={() => saveSection(1, [section1])}>حفظ القسم</button>
+            <button onClick={() => saveSection(1, [section1])} disabled={saving}>{saving ? "جاري الحفظ..." : "حفظ القسم"}</button>
           </div>
 
           <div className="card">
@@ -392,7 +416,7 @@ function App() {
             <ListEditor items={links} onChange={setLinks} onUpload={uploadImage} />
             <div className="row">
               <button onClick={() => addItem(setLinks, links)}>إضافة رابط</button>
-              <button className="secondary" onClick={() => saveSection(2, links)}>
+              <button className="secondary" onClick={() => saveSection(2, links)} disabled={saving}>
                 حفظ الروابط
               </button>
             </div>
@@ -403,7 +427,7 @@ function App() {
             <ListEditor items={offers} onChange={setOffers} onUpload={uploadImage} />
             <div className="row">
               <button onClick={() => addItem(setOffers, offers)}>إضافة عرض</button>
-              <button className="secondary" onClick={() => saveSection(3, offers)}>
+              <button className="secondary" onClick={() => saveSection(3, offers)} disabled={saving}>
                 حفظ العروض
               </button>
             </div>
@@ -462,7 +486,7 @@ function ListEditor({ items, onChange, onUpload }) {
   return (
     <div>
       {items.map((item, index) => (
-        <div className="list-item" key={index}>
+        <div className="list-item" key={item._key || index}>
           <div className="row">
             <div style={{ flex: 1 }}>
               <label>العنوان</label>
@@ -523,15 +547,31 @@ function ListEditor({ items, onChange, onUpload }) {
   );
 }
 
-function updateList(setter, list, index, field, value) {
-  const updated = [...list];
-  updated[index] = { ...updated[index], [field]: value };
-  setter(updated);
-}
+ReactDOM.createRoot(document.getElementById("root")).render(
+  React.createElement(ErrorBoundary, null, React.createElement(App))
+);
 
-function removeItem(setter, list, index) {
-  const updated = list.filter((_, idx) => idx !== index);
-  setter(updated.length ? updated : [emptyItem()]);
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return React.createElement("div", { className: "container" },
+        React.createElement("div", { className: "card" },
+          React.createElement("div", { className: "section-title" }, "⚠️ حدث خطأ غير متوقع"),
+          React.createElement("div", { className: "muted" }, this.state.error?.message || ""),
+          React.createElement("button", {
+            style: { marginTop: 12 },
+            onClick: () => { this.setState({ hasError: false, error: null }); }
+          }, "إعادة المحاولة")
+        )
+      );
+    }
+    return this.props.children;
+  }
 }
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
