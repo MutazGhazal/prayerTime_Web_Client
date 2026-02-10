@@ -101,5 +101,9 @@ tr:hover td{background:#f9faf8}
 .toast.error{background:#c62828}
 @keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 
+/* ========== Link Button ========== */
+.btn-link{background:none;border:none;color:#2E7D32;cursor:pointer;font-size:13px;font-weight:600;padding:4px 0;text-decoration:none}
+.btn-link:hover{text-decoration:underline}
+
 /* ========== Responsive ========== */
 @media(max-width:600px){.row{flex-direction:column}.auth-card{padding:24px 20px}.container{padding:12px 10px 40px}}

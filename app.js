@@ -89,6 +89,7 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [showForgotPw, setShowForgotPw] = useState(false);
   const [client, setClient] = useState(null);
   const [section1, setSection1] = useState(emptyItem());
   const [links, setLinks] = useState([emptyItem()]);
@@ -146,6 +147,17 @@ function App() {
   async function signOut() {
     await supabase.auth.signOut();
     setClient(null); setUserItems([emptyItem()]);
+  }
+
+  async function resetPassword() {
+    var em = email.trim();
+    if (!em) { showToast("يرجى إدخال بريدك الإلكتروني أولاً", "error"); return; }
+    setAuthBusy(true); setAuthMsg(null);
+    var res = await supabase.auth.resetPasswordForEmail(em);
+    setAuthBusy(false);
+    if (res.error) { setAuthMsg({ type: "error", text: res.error.message }); return; }
+    showToast("تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك ✓");
+    setShowForgotPw(false);
   }
 
   async function loadClientProfile() {
@@ -255,6 +267,25 @@ function App() {
           <div className="auth-title">بوابة العميل</div>
           <div className="auth-subtitle">سجّل دخولك لإدارة المحتوى والمشاركة</div>
           {authMsg && <div className={"alert " + authMsg.type}>{authMsg.text}</div>}
+          {showForgotPw ? (
+            <div className="auth-form">
+              <div style={{textAlign:"center",marginBottom:16}}>
+                <div style={{fontSize:36,marginBottom:8}}>🔑</div>
+                <div style={{fontWeight:700,fontSize:16}}>استعادة كلمة المرور</div>
+                <div className="muted" style={{marginTop:4,fontSize:13}}>أدخل بريدك الإلكتروني وسنرسل لك رابط لإعادة التعيين</div>
+              </div>
+              <div className="field">
+                <label>البريد الإلكتروني</label>
+                <input type="email" placeholder="name@example.com" value={email} onChange={function(e){setEmail(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")resetPassword();}} />
+              </div>
+              <div className="auth-actions">
+                <button className="btn-primary" onClick={resetPassword} disabled={authBusy}>{authBusy ? "جاري الإرسال..." : "إرسال رابط الاستعادة"}</button>
+              </div>
+              <div style={{textAlign:"center",marginTop:12}}>
+                <button className="btn-link" onClick={function(){setShowForgotPw(false);setAuthMsg(null);}}>← العودة لتسجيل الدخول</button>
+              </div>
+            </div>
+          ) : (
           <div className="auth-form">
             <div className="field">
               <label>البريد الإلكتروني</label>
@@ -267,7 +298,13 @@ function App() {
                 <button type="button" className="pass-toggle" onClick={function(){setShowPass(!showPass);}}>{showPass?"إخفاء":"عرض"}</button>
               </div>
             </div>
+            <div style={{textAlign:"right",marginTop:4}}>
+              <button className="btn-link" onClick={function(){setShowForgotPw(true);setAuthMsg(null);}}>نسيت كلمة المرور؟</button>
+            </div>
           </div>
+          )}
+          {!showForgotPw && (
+          <div>
           <div className="auth-actions">
             <button className="btn-primary" onClick={signIn} disabled={authBusy}>{authBusy?"جاري الدخول...":"تسجيل الدخول"}</button>
             <button className="btn-secondary" style={{width:"100%",padding:12,borderRadius:12,fontSize:14}} onClick={signUp} disabled={authBusy}>إنشاء حساب جديد</button>
@@ -277,6 +314,8 @@ function App() {
             <GoogleIcon />
             المتابعة عبر Google
           </button>
+          </div>
+          )}
         </div>
       </div>
     );
