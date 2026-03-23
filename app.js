@@ -95,6 +95,15 @@ function App() {
   const [links, setLinks] = useState([emptyItem()]);
   const [offers, setOffers] = useState([emptyItem()]);
   const [userItems, setUserItems] = useState([emptyItem()]);
+  const [adminAds, setAdminAds] = useState([]);
+  const [previewLocation, setPreviewLocation] = useState("عمان - وزارة الأوقاف");
+  const [previewBgUrl, setPreviewBgUrl] = useState((config && config.PREVIEW_BG) || "https://images.unsplash.com/photo-1547970812-57d3e160046f?w=800");
+  const [previewScale, setPreviewScale] = useState(1.0);
+  const sectionRefs = { userItems: React.useRef(null), section1: React.useRef(null), links: React.useRef(null), offers: React.useRef(null) };
+  function scrollToSection(id) {
+    var ref = sectionRefs[id];
+    if (ref && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   if (!supabase) {
     return <div className="auth-page"><div className="auth-card">تعذر تشغيل البوابة</div></div>;
@@ -115,7 +124,12 @@ function App() {
     return function() { sub.data.subscription.unsubscribe(); };
   }, []);
 
-  useEffect(function() { if (session) { loadClientProfile(); loadUserSections(); } }, [session]);
+  useEffect(function() { if (session) { loadClientProfile(); loadUserSections(); loadAdminAds(); } }, [session]);
+
+  async function loadAdminAds() {
+    var res = await supabase.from("app_ads").select("*").eq("type", "admin").limit(5);
+    if (!res.error) setAdminAds(res.data || []);
+  }
 
   async function signIn() {
     setAuthBusy(true); setAuthMsg(null);
@@ -492,3 +506,90 @@ function ListEditor(props) {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+/* ========== App Live Preview ========== */
+function AppLivePreview(props) {
+  var clientMeta = props.clientMeta || {};
+  var section1 = props.section1 || emptyItem();
+  var adminAds = props.adminAds || [];
+  var userItems = props.userItems || [];
+  var scrollToSection = props.scrollToSection || function(){};
+  var previewLocation = props.previewLocation || "الموقع";
+  var bgUrl = props.previewBgUrl;
+  var scale = props.previewScale || 1.0;
+
+  var w = 360 * scale;
+  var h = 640 * scale;
+
+  var hasContent = function(i){ return i && (i.title || i.body || i.image_url || i.link_url); };
+  var userList = userItems.filter(hasContent);
+  var adminList = adminAds.filter(hasContent).slice(0, 5);
+
+  var ordered = [];
+  if (adminList[3]) ordered.push({ item: adminList[3], type: "admin", idx: 3 });
+  if (userList[2]) ordered.push({ item: userList[2], type: "user", idx: 2 });
+  if (userList[1]) ordered.push({ item: userList[1], type: "user", idx: 1 });
+  if (adminList[2]) ordered.push({ item: adminList[2], type: "admin", idx: 2 });
+  if (adminList[1]) ordered.push({ item: adminList[1], type: "admin", idx: 1 });
+  if (adminList[0]) ordered.push({ item: adminList[0], type: "admin", idx: 0 });
+  if (adminList[4]) ordered.push({ item: adminList[4], type: "admin", idx: 4 });
+
+  var now = new Date();
+  var mockTimes = [
+    { n: "الفجر", t: "5:30" }, { n: "الشروق", t: "7:00" },
+    { n: "الظهر", t: "12:30" }, { n: "العصر", t: "3:45" },
+    { n: "المغرب", t: "6:15" }, { n: "العشاء", t: "7:45" }
+  ];
+
+  return (
+    <div className="card" style={{ overflow: "visible" }}>
+      <div className="card-title"><span className="icon">📱</span> معاينة حية للتطبيق</div>
+      <div className="app-preview-wrap">
+        <div className="app-preview-phone" style={{ width: w + 24, height: h + 60 }}>
+          <div className="app-preview-screen" style={{ width: w, height: h }}>
+            <div className="app-preview-bg" style={{ backgroundImage: "url(" + bgUrl + ")" }} />
+            <div className="app-preview-overlay" />
+            <div className="app-preview-content" style={{ fontSize: 11 * scale }}>
+              <div className="app-preview-header" onClick={function(){scrollToSection("clientMeta");}} title="تحرير: اللوجو والعنوان">
+                {clientMeta.logo_url ? <img src={clientMeta.logo_url} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "contain" }} /> : <span style={{ fontSize: 18 }}></span>}
+                <span style={{ flex: 1, textAlign: "center", fontWeight: 700, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>{clientMeta.name || "أوقات الصلاة"}</span>
+              </div>
+              <div className="app-preview-body">
+                {userList[0] && (
+                  <div className="app-preview-card" onClick={function(){scrollToSection("userItems");}} title="تحرير: عنصرك 1">
+                    {userList[0].image_url && <img src={userList[0].image_url} alt="" style={{ width: "100%", height: 70, objectFit: "cover", borderRadius: 6 }} />}
+                    {userList[0].title && <div style={{ padding: "4px 8px", background: "rgba(0,0,0,0.5)", color: "#fff", borderRadius: 4, marginTop: 4, fontSize: 10 }}>{userList[0].title}</div>}
+                  </div>
+                )}
+                <div className="app-preview-card" style={{ padding: "8px 12px", background: "rgba(0,0,0,0.5)", borderRadius: 8 }}>
+                  <div style={{ color: "#fff", fontWeight: 700, fontSize: 12, padding: 0 }}>{previewLocation}</div>
+                  <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 10 }}>{now.toLocaleDateString("ar")} | {now.toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" })}</div>
+                </div>
+                <div className="app-preview-card" style={{ padding: "8px 12px", background: "rgba(110,0,26,0.7)", borderRadius: 8 }}>
+                  <div style={{ color: "#fff", fontSize: 10 }}>الصلاة القادمة</div>
+                  <div style={{ color: "#fff", fontWeight: 800, fontSize: 14 }}>المغرب • 2س 30د</div>
+                </div>
+                <div className="app-preview-card" style={{ padding: "6px 10px", background: "rgba(0,0,0,0.5)", borderRadius: 8 }}>
+                  {mockTimes.map(function(m, i){ return <div key={i} style={{ display: "flex", justifyContent: "space-between", color: "#fff", fontSize: 10, padding: "2px 0" }}><span>{m.n}</span><span>{m.t}</span></div>; })}
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <div className="app-preview-btn" style={{ flex: 1, padding: "6px 10px", background: "#2E7D32", color: "#fff", borderRadius: 8, fontSize: 9, textAlign: "center" }}>مشاركة حالة اليوم</div>
+                  <div className="app-preview-btn" style={{ flex: 1, padding: "6px 10px", border: "1px solid #fff", color: "#fff", borderRadius: 8, fontSize: 9, textAlign: "center" }}>التذكير بالصلاة</div>
+                </div>
+                <div className="app-preview-ads" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 4, marginTop: 8 }}>
+                  {ordered.slice(0, 6).map(function(o, i){
+                    return (
+                      <div key={i} className="app-preview-ad" onClick={function(){ if(o.type==="user") scrollToSection("userItems"); }} title={o.type === "admin" ? "إعلان أدمن" : "إعلانك الخاص"}>
+                        {o.item.image_url ? <img src={o.item.image_url} alt="" style={{ width: "100%", height: 50, objectFit: "cover", borderRadius: 6 }} /> : <div style={{ width: "100%", height: 50, background: "rgba(0,0,0,0.3)", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.7)", fontSize: 9 }}>إعلان</div>}
+                        {o.item.title && <div style={{ fontSize: 8, color: "#fff", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap", marginTop: 2 }}>{o.item.title}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
