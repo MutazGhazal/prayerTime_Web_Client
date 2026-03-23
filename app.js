@@ -91,6 +91,7 @@ function App() {
   const [showPass, setShowPass] = useState(false);
   const [showForgotPw, setShowForgotPw] = useState(false);
   const [client, setClient] = useState(null);
+  const [appUser, setAppUser] = useState(null);
   const [section1, setSection1] = useState(emptyItem());
   const [links, setLinks] = useState([emptyItem()]);
   const [offers, setOffers] = useState([emptyItem()]);
@@ -99,6 +100,17 @@ function App() {
   const [previewLocation, setPreviewLocation] = useState("عمان - وزارة الأوقاف");
   const [previewBgUrl, setPreviewBgUrl] = useState((config && config.PREVIEW_BG) || "https://images.unsplash.com/photo-1547970812-57d3e160046f?w=800");
   const [previewScale, setPreviewScale] = useState(1.0);
+  const [joinMode, setJoinMode] = useState(function() {
+    var fullUrl = window.location.href;
+    var params = new URLSearchParams(window.location.search);
+    var j = params.get("join");
+    if (!j && fullUrl.indexOf("join=") !== -1) {
+      var match = fullUrl.match(/join=([^&#]*)/);
+      if (match && match[1]) j = match[1];
+    }
+    return j;
+  });
+  
   const sectionRefs = { userItems: React.useRef(null), section1: React.useRef(null), links: React.useRef(null), offers: React.useRef(null) };
   function scrollToSection(id) {
     var ref = sectionRefs[id];
@@ -110,6 +122,13 @@ function App() {
   }
 
   useEffect(function() {
+    if (joinMode) {
+      var deepLink = "com.prayertimes.athan://join?ref=" + joinMode;
+      var storeLink = "https://play.google.com/store/apps/details?id=com.prayertimes.athan";
+      showToast("جاري تحويلك للتطبيق...");
+      window.location.href = deepLink;
+    }
+
     var params = new URLSearchParams(window.location.search);
     var code = params.get("code");
     if (code) {
@@ -124,7 +143,14 @@ function App() {
     return function() { sub.data.subscription.unsubscribe(); };
   }, []);
 
-  useEffect(function() { if (session) { loadClientProfile(); loadUserSections(); loadAdminAds(); } }, [session]);
+  useEffect(function() { if (session) { loadAppUser(); loadClientProfile(); loadUserSections(); loadAdminAds(); } }, [session]);
+
+  async function loadAppUser() {
+    var uid = session && session.user ? session.user.id : null;
+    if (!uid) return;
+    var res = await supabase.from("app_users").select("*").eq("user_id", uid).maybeSingle();
+    if (!res.error) setAppUser(res.data);
+  }
 
   async function loadAdminAds() {
     var res = await supabase.from("app_ads").select("*").eq("type", "admin").limit(5);
@@ -248,20 +274,26 @@ function App() {
     if (!uid) return;
     setSaving(true);
     try {
-      await supabase.from("app_ads").delete().eq("owner_id", uid).in("type", ["user", "profile"]);
+      await supabase.from("app_ads").delete().eq("owner_id", uid).in("type", ["user", "profile", "supervisor", "admin"]);
       var payload = [];
       for (var idx = 0; idx < items.length; idx++) {
         var i = items[idx];
         if (i.title || i.body || i.image_url || i.link_url) {
+          var type = "user";
+          if (appUser && appUser.role === "admin") type = "admin";
+          else if (appUser && appUser.role === "supervisor") type = "supervisor";
+          else if (idx === 0) type = "profile";
+
           payload.push({ 
             owner_id: uid, 
-            type: idx === 0 ? "profile" : "user",
-            section: 1, 
+            type: type,
+            section: type === "admin" ? 4 : 1, 
             title: i.title, 
             body: i.body, 
             image_url: i.image_url, 
             link_url: i.link_url, 
-            sort_order: idx 
+            sort_order: idx,
+            is_active: true
           });
         }
       }
@@ -278,6 +310,55 @@ function App() {
       acc[s].push(items[idx]);
     }
     return acc;
+  }
+
+  /* ===== JOIN PAGE ===== */
+  if (joinMode) {
+    var deepLink = "com.prayertimes.athan://join?ref=" + joinMode;
+    var storeLink = "https://play.google.com/store/apps/details?id=com.prayertimes.athan";
+    return (
+      <div className="auth-page">
+        <div className="auth-card" style={{ textAlign: "center", padding: "40px 20px" }}>
+          <div style={{ fontSize: 72, marginBottom: 20 }}>🕌</div>
+          <h2 style={{ marginBottom: 16, fontSize: 24 }}>أهلاً بك في تطبيقنا!</h2>
+          <p className="muted" style={{ marginBottom: 30, lineHeight: 1.8, fontSize: 15 }}>
+            لديك دعوة للانضمام إلى المجموعة وإدارة إعلاناتك.<br/>
+            <strong>يرجى فتح التطبيق للاستمرار في عملية الربط.</strong>
+          </p>
+          
+          <a href={deepLink} className="btn-save" style={{ 
+            display: "block", 
+            textDecoration: "none", 
+            marginBottom: 20, 
+            fontSize: 18, 
+            padding: "16px",
+            background: "linear-gradient(135deg, #2E7D32, #1B5E20)",
+            boxShadow: "0 4px 15px rgba(0,0,0,0.3)"
+          }}>
+            🚀 فتح في التطبيق الآن
+          </a>
+          
+          <div className="auth-divider">أو</div>
+          
+          <div style={{ marginTop: 24 }}>
+            <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>إذا لم يكن لديك التطبيق بعد:</p>
+            <button className="btn-secondary" style={{ width: "100%", padding: 14, fontSize: 15, marginBottom: 10 }} onClick={function(){ window.location.href=storeLink; }}>
+              🛍️ تحميل من Google Play
+            </button>
+          </div>
+
+          <div style={{ marginTop: 30, padding: 12, backgroundColor: "rgba(0,0,0,0.05)", borderRadius: 12 }}>
+            <p className="muted" style={{ fontSize: 12 }}>
+              💡 <strong>ملاحظة:</strong> إذا لم يفتح التطبيق تلقائياً، يرجى النقر على الثلاث نقاط في الزاوية واختيار "Open in Browser" (الفتح في المتصفح).
+            </p>
+          </div>
+          
+          <button className="btn-link" style={{ marginTop: 20 }} onClick={function(){ setJoinMode(null); window.history.replaceState({}, "", window.location.origin + window.location.pathname); }}>
+            دخول كأدمن/مشرف للموقع
+          </button>
+        </div>
+      </div>
+    );
   }
 
   /* ===== LOGIN PAGE ===== */
@@ -364,40 +445,51 @@ function App() {
           </div>
         )}
 
-        <div className="card">
-          <div className="card-title"><span className="icon">📝</span> محتوى المستخدم الخاص</div>
-          <ListEditor items={userItems} setter={setUserItems} showBody={true} showImage={true} onUpload={uploadUserImage} uploading={uploading} />
-          <div className="actions">
-            <button className="btn-add" onClick={function(){setUserItems(userItems.concat([emptyItem()]));}}>+ إضافة عنصر</button>
-            <button className="btn-save" onClick={function(){saveUserSection(userItems);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ المحتوى"}</button>
+        {!appUser || !appUser.is_approved ? (
+          <div className="card" style={{ textAlign: "center", padding: 40 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+            <h3>بإنتظار موافقة الإدارة</h3>
+            <p className="muted">حسابك قيد المراجعة حالياً. سيتم تفعيل ميزة إضافة الإعلانات فور موافقة المسؤول.</p>
+            <button className="btn-save" style={{ marginTop: 20 }} onClick={loadAppUser}>تحديث الحالة ↻</button>
           </div>
-        </div>
-
-        {client && (
+        ) : (
           <div>
             <div className="card">
-              <div className="card-title"><span className="icon">🏢</span> بيانات الشركة</div>
-              <ContentEditor item={section1} onChange={setSection1} onUpload={uploadImage} uploading={uploading} />
-              <div className="actions"><button className="btn-save" onClick={function(){saveSection(1,[section1]);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ"}</button></div>
-            </div>
-
-            <div className="card">
-              <div className="card-title"><span className="icon">🔗</span> روابط الشركة</div>
-              <ListEditor items={links} setter={setLinks} showBody={true} showImage={true} onUpload={uploadImage} uploading={uploading} />
+              <div className="card-title"><span className="icon">📝</span> محتوى المستخدم الخاص</div>
+              <ListEditor items={userItems} setter={setUserItems} showBody={true} showImage={true} onUpload={uploadUserImage} uploading={uploading} />
               <div className="actions">
-                <button className="btn-add" onClick={function(){setLinks(links.concat([emptyItem()]));}}>+ إضافة رابط</button>
-                <button className="btn-save" onClick={function(){saveSection(2,links);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ الروابط"}</button>
+                <button className="btn-add" onClick={function(){setUserItems(userItems.concat([emptyItem()]));}}>+ إضافة عنصر</button>
+                <button className="btn-save" onClick={function(){saveUserSection(userItems);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ المحتوى"}</button>
               </div>
             </div>
 
-            <div className="card">
-              <div className="card-title"><span className="icon">🎁</span> عروض الشركة</div>
-              <ListEditor items={offers} setter={setOffers} showBody={true} showImage={true} onUpload={uploadImage} uploading={uploading} />
-              <div className="actions">
-                <button className="btn-add" onClick={function(){setOffers(offers.concat([emptyItem()]));}}>+ إضافة عرض</button>
-                <button className="btn-save" onClick={function(){saveSection(3,offers);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ العروض"}</button>
+            {client && (
+              <div>
+                <div className="card">
+                  <div className="card-title"><span className="icon">🏢</span> بيانات الشركة</div>
+                  <ContentEditor item={section1} onChange={setSection1} onUpload={uploadImage} uploading={uploading} />
+                  <div className="actions"><button className="btn-save" onClick={function(){saveSection(1,[section1]);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ"}</button></div>
+                </div>
+
+                <div className="card">
+                  <div className="card-title"><span className="icon">🔗</span> روابط الشركة</div>
+                  <ListEditor items={links} setter={setLinks} showBody={true} showImage={true} onUpload={uploadImage} uploading={uploading} />
+                  <div className="actions">
+                    <button className="btn-add" onClick={function(){setLinks(links.concat([emptyItem()]));}}>+ إضافة رابط</button>
+                    <button className="btn-save" onClick={function(){saveSection(2,links);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ الروابط"}</button>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-title"><span className="icon">🎁</span> عروض الشركة</div>
+                  <ListEditor items={offers} setter={setOffers} showBody={true} showImage={true} onUpload={uploadImage} uploading={uploading} />
+                  <div className="actions">
+                    <button className="btn-add" onClick={function(){setOffers(offers.concat([emptyItem()]));}}>+ إضافة عرض</button>
+                    <button className="btn-save" onClick={function(){saveSection(3,offers);}} disabled={saving}>{saving?"جاري الحفظ...":"💾 حفظ العروض"}</button>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
