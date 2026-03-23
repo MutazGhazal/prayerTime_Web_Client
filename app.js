@@ -178,7 +178,7 @@ function App() {
   async function loadUserSections() {
     var uid = session && session.user ? session.user.id : null;
     if (!uid) return;
-    var res = await supabase.from("app_user_sections").select("*").eq("user_id", uid).order("sort_order", { ascending: true });
+    var res = await supabase.from("app_ads").select("*").eq("owner_id", uid).order("sort_order", { ascending: true });
     if (res.error) { showToast(res.error.message, "error"); return; }
     setUserItems((res.data || []).length ? res.data : [emptyItem()]);
   }
@@ -234,15 +234,24 @@ function App() {
     if (!uid) return;
     setSaving(true);
     try {
-      await supabase.from("app_user_sections").delete().eq("user_id", uid);
+      await supabase.from("app_ads").delete().eq("owner_id", uid).in("type", ["user", "profile"]);
       var payload = [];
       for (var idx = 0; idx < items.length; idx++) {
         var i = items[idx];
         if (i.title || i.body || i.image_url || i.link_url) {
-          payload.push({ user_id: uid, section: 1, title: i.title, body: i.body, image_url: i.image_url, link_url: i.link_url, sort_order: idx });
+          payload.push({ 
+            owner_id: uid, 
+            type: idx === 0 ? "profile" : "user",
+            section: 1, 
+            title: i.title, 
+            body: i.body, 
+            image_url: i.image_url, 
+            link_url: i.link_url, 
+            sort_order: idx 
+          });
         }
       }
-      if (payload.length) { var res = await supabase.from("app_user_sections").insert(payload); if (res.error) { showToast(res.error.message, "error"); return; } }
+      if (payload.length) { var res = await supabase.from("app_ads").insert(payload); if (res.error) { showToast(res.error.message, "error"); return; } }
       showToast("تم حفظ المحتوى الخاص ✓");
     } finally { setSaving(false); }
   }
